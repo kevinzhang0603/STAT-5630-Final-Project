@@ -1,0 +1,65 @@
+```{r}
+#data
+data = read.csv("/Users/kevinzhang/Downloads/insurance.csv") 
+names(data)[names(data) == 'expenses'] <- 'charges'
+
+## Train-Test Split ----
+
+# We will use 80/20 train/test split size for our data
+set.seed(2023)
+train.indices = sample(1:nrow(data), 0.8 * nrow(data))
+train = data[train.indices,]
+test = data[-train.indices,]
+
+train$charges.log = log(train$charges)
+test$charges.log = log(test$charges)
+
+train <- subset(train, select = -charges)
+test <- subset(test, select = -charges)
+
+#Fit a generic linear model
+fitted.linear <- lm(charges.log ~ ., data = train)
+# plug-in the estimated beta, and generate predictions of Y.
+y.pred <- predict(fitted.linear, data.frame(test))
+# MPSE
+mspe.lm <- mean((y.pred - test$charges.log)^2)
+paste("Linear MSE = ",mspe.lm)
+
+
+
+#Ridge Regression Model
+# Create x and y training dataset
+x.train <- data.matrix(train[, -which(names(train) == "charges.log")])
+y.train <-train$charges.log
+
+# Fit a ridge regression model using 10-fold cross-validation
+cv_fit <- cv.glmnet(x.train, y.train, alpha = 0, nfolds = 10, lambda = exp(seq(-10, 10, length.out = 1000)))
+
+# Find best lambda
+best.lambda <- cv_fit$lambda.min
+
+# Fit ridge model using best lambda
+insurance.fit <- glmnet(x.train, y.train, alpha = 0, lambda = best.lambda)
+
+# Apply the model to test data
+x.test <- data.matrix(test[, -which(names(test) == "charges.log")])
+y.test.pred <- predict(cv_fit, x.test)
+
+# Calculate the mean squared prediction error
+mse <- mean((test$charges.log - y.test.pred)^2)
+paste("Ridge MSE = ",mse)
+
+
+#Lasso Regression Model
+#i) Choose best lasso regression model
+cv_fit_lasso <- cv.glmnet(x.train, y.train, alpha = 1, nfolds = 10, lambda = exp(seq(-10, 10, length.out = 1000)))
+best.lambda.lasso <- cv_fit_lasso$lambda.min
+final_fit_lasso <- glmnet(x.train, y.train, alpha = 1, lambda = best.lambda.lasso)
+
+#ii) Apply the model to test data
+y_test_pred_lasso <- predict(final_fit_lasso, x.test)
+
+#iii) Calculate the mean squared prediction error
+mse_lasso <- mean((test$charges.log - y_test_pred_lasso)^2)
+paste("Lasso MSE = ",mse_lasso)
+```
